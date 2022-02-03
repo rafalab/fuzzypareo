@@ -15,12 +15,27 @@
 #' @import data.table
 #' @importFrom stats ARMAacf glm poly qnorm fitted.values
 
-fuzzy_match <- function(query, target, cutoff = 0.2,
+fuzzy_match <- function(query, target = NULL, cutoff = 0.2,
                         total.max = 8, full.max= 8, check.truncated = TRUE, truncate = "am",
                         min.n = 25) {
-  ##min.n minium required to fit models
   query <- copy(query)
-  target <- copy(target)
+
+  ##min.n minium required to fit models
+  if(is.null(target)){
+    target <- copy(query)
+    self_match <- TRUE
+  } else{
+    target <- copy(target)
+    self_match <- FALSE
+  }
+
+  req_col_names <- c("id", "original", "full", "pn", "sn", "sn_i", "ap", "am", "genero", "lugar", "dob")
+  if(!all(req_col_names %in% names(query)) |
+     !all(req_col_names %in% names(target))){
+    stop(paste("query and target must include columns named:",
+               paste(req_col_names, collapse =", "), "as returned by wrangle_table."))
+  }
+
   message("Calculando frecuencias para los nombres.")
   freq <- compute_name_freqs(target)
 
@@ -75,6 +90,8 @@ fuzzy_match <- function(query, target, cutoff = 0.2,
                                        by.x = by.xs[[i]], by.y = by.ys[[i]])
     }
 
+    if(self_match) pms[[i]] <- pms[[i]][id.x!=id.y]
+
     is_full <- identical(by.xs[[i]], "full") & identical(by.ys[[i]],"full")
     if(!is.null(pms[[i]])){
       if(nrow(pms[[i]])>0){
@@ -120,10 +137,8 @@ fuzzy_match <- function(query, target, cutoff = 0.2,
     }
   }
 
-
-
   pms <- rbindlist(c(pms, pms_r))
-  pms$match <- factor("perfect", levels=c("perfect", "fuzzy"))
+    pms$match <- factor("perfect", levels=c("perfect", "fuzzy"))
   pms$truncated <- FALSE
   cols <-c("pn", "sn", "ap", "am")
   for(cn in cols){
@@ -135,7 +150,7 @@ fuzzy_match <- function(query, target, cutoff = 0.2,
   message("\nEncontrando pareos con errores.")
 
 
-  fms <- fuzzy_match_engine(query[keep_query], target[keep_target],  total.max=total.max, full.max=full.max)
+  fms <- fuzzy_match_engine(query[keep_query], target[keep_target],  total.max=total.max, full.max=full.max, self.match = self_match)
   fms$reverse_dob <- FALSE
 
   message("\nEncontrando pareos con errores con mes y día invertido.")
@@ -240,11 +255,12 @@ fuzzy_match <- function(query, target, cutoff = 0.2,
   cols <- paste(c("pn", "sn", "ap", "am"), "freq", sep="_")
   map[, (cols) := lapply(.SD, freq_impute), .SDcols = cols]
 
+  map[, sn_i_dist := as.numeric(!sn_i_match)]
+  map[, sn_i_nchar := as.numeric(!is.na(sn_i_match))]
   for(i in seq_along(patterns)){
     p <- patterns[[i]]
     dist_cols <- paste(p, "dist", sep="_")
-    dist_cols[p=="sn_i"] <- "sn_i_match"
-    nchar_cols <- paste(p[p!="sn_i"], "nchar", sep="_")
+    nchar_cols <- paste(p, "nchar", sep="_")
     if(!is.null(freqs[[i]])){
       freq_cols <- paste(freqs[[i]], "freq", sep="_")
     } else freq_cols<- NULL
@@ -252,8 +268,7 @@ fuzzy_match <- function(query, target, cutoff = 0.2,
     ind <- !matrixStats::rowAnyNAs(as.matrix(map[, ..dist_cols])) &
       is.na(map[,score]) ## needed columns not NA and not yet scored
 
-    map$prop_match[ind] <- 1 - rowSums(map[ind,..dist_cols])/
-      (rowSums(map[ind,..nchar_cols]) + "sn_i"%in%p)
+    map$prop_match[ind] <- 1 - rowSums(map[ind,..dist_cols])/(rowSums(map[ind,..nchar_cols]))
 
     the_formula <- paste("lugar_match ~ pmax(prop_match,0.6)")
     if(!is.null(freq_cols)){
@@ -269,7 +284,7 @@ fuzzy_match <- function(query, target, cutoff = 0.2,
     } else{ ## if not enough to fit model, just compute the proportion of matches
       map[ind,  score := mean(lugar_match, na.rm=TRUE)]
     }
-    map[ind, pattern := paste(p, collapse=":")]
+    map[ind, pattern := paste(p, collapse = ":")]
   }
 
 

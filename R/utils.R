@@ -138,7 +138,7 @@ perfect_match_engine <- function(query, target, by=NULL, by.x=NULL, by.y=NULL){
   return(map)
 }
 
-fuzzy_match_engine <- function(query, target, total.max = 8, full.max = 8){
+fuzzy_match_engine <- function(query, target, total.max = 8, full.max = 8, self.match = FALSE){
 
   query_index <- split(1:nrow(query), query$dob)
   target_index <- split(1:nrow(target), target$dob)
@@ -157,6 +157,11 @@ fuzzy_match_engine <- function(query, target, total.max = 8, full.max = 8){
 
     qind <- query_index[[i]]
     tind <- target_index[[i]]
+
+    if(self.match){
+      tind <- tind[tind %in% qind] ##remove same record to not compare to self
+      if(length(tind) == 0) return(NULL)
+    }
 
     qq <- query[qind]
     tt <- target[tind]

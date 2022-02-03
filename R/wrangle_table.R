@@ -44,7 +44,7 @@ wrangle_table <- function(tab){
 
   tab[, (cols) := lapply(.SD, as.character), .SDcols = cols]
   ## move second last name if two names in one
-  message("Encontrando sugundos nombres/apellidos en columna incorrecta.")
+  message("Encontrando segundos nombres/apellidos en columna incorrecta.")
   split_pn <- str_split_fixed(tab$pn, "\\s+", n = 3) ## 3 to catch the extra, do not merge
   split_ap <- str_split_fixed(tab$ap, "\\s+", n = 3)
   ## IF the middle initial was moved to the last name field:

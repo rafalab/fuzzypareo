@@ -6,7 +6,7 @@
 \usage{
 fuzzy_match(
   query,
-  target,
+  target = NULL,
   cutoff = 0.2,
   total.max = 8,
   full.max = 8,

@@ -1,7 +1,7 @@
 Package: fuzzypareo
 Type: Package
 Title: Matches names in spanish that are spelled with error
-Version: 0.0.1
+Version: 0.0.2
 Authors@R: c(person(c("Rafael", "A."), "Irizarry", email = "rafael_irizarry@dfci.harvard.edu",
                   role = c("aut", "cre")),
              person("Mónica", "Robles-Fontán", role = "ctb"))
@@ -11,7 +11,7 @@ Imports: stats,
     stringr,
     stringdist
 VignetteBuilder: knitr
-Description: Matches two databases with names in spanish. Uses date of birth and location to improve matching and speed.
+Description: Matches two databases with names in Spanish. Uses date of birth and location to improve matching and speed.
 License: Artistic-2.0
 Encoding: UTF-8
 LazyData: true
