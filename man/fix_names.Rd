@@ -7,7 +7,5 @@
 fix_names(x)
 }
 \description{
-import data.table
-import lubridate
-import stringr
+Helper functions for fuzzy match
 }

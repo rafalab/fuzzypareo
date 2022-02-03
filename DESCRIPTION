@@ -8,8 +8,8 @@ Authors@R: c(person(c("Rafael", "A."), "Irizarry", email = "rafael_irizarry@dfci
 Depends: R (>= 3.5.0),
 Imports: stats,
     data.table,
-    lubridate,
-    stringr
+    stringr,
+    stringdist
 VignetteBuilder: knitr
 Description: Matches two databases with names in spanish. Uses date of birth and location to improve matching and speed.
 License: Artistic-2.0
