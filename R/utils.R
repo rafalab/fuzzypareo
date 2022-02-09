@@ -3,6 +3,8 @@
 #' @import data.table
 #' @import stringr
 #' @importFrom stringdist stringdist stringdistmatrix
+#' @importFrom matrixStats rowAnyNAs
+
 
 fix_names <- function(x){
   levels(x) <-
@@ -159,7 +161,7 @@ fuzzy_match_engine <- function(query, target, total.max = 8, full.max = 8, self.
     tind <- target_index[[i]]
 
     if(self.match){
-      tind <- tind[tind %in% qind] ##remove same record to not compare to self
+      tind <- tind[!tind %in% qind] ##remove same record to not compare to self
       if(length(tind) == 0) return(NULL)
     }
 

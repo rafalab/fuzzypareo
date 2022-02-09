@@ -1,4 +1,4 @@
-#' Match two data bases based on names and dates of birth
+#' @title Match two data bases based on names and dates of birth permitting differences
 #'
 #'
 #' @param query A data.table with the names to be matched
@@ -13,7 +13,9 @@
 #' @return A data.table with matches
 #' @export
 #' @import data.table
-#' @importFrom stats ARMAacf glm poly qnorm fitted.values
+#' @importFrom matrixStats rowAnyNAs
+#'
+#'
 
 fuzzy_match <- function(query, target = NULL, cutoff = 0.2,
                         total.max = 8, full.max= 8, check.truncated = TRUE, truncate = "am",
@@ -288,17 +290,15 @@ fuzzy_match <- function(query, target = NULL, cutoff = 0.2,
   }
 
 
-  map[, score := (score - min(score, na.rm=TRUE)) / max(score - min(score,na.rm=TRUE),na.rm = TRUE)]
+  map[, score := (score - min(score, na.rm=TRUE)) / max(score - min(score,na.rm=TRUE), na.rm = TRUE)]
   map <- map[!is.na(score)]
 
   ## Pick the best score for each id.x
-  map <- map[map[,.I[score==max(score, na.rm = TRUE)], by = id.x]$V1]
+  if(!self_match) map <- map[map[,.I[score==max(score, na.rm = TRUE)], by = id.x]$V1]
   setnames(map, "match", "match_type")
   map <- merge(merge(map, target, by.x = "id.y", by.y = "id", all.x = TRUE), query, by.x = "id.x", by.y = "id", all.x=TRUE)
   cols <- c("id.x", "id.y", "original.x", "original.y","score",
             "prop_match", "full_prop_match", "pn_ap_match", "lugar_match", "genero_match", "pattern", "match_type", "full_match", "swap", "reverse_dob", "truncated")
   return(map[score>=cutoff, ..cols])
 }
-
-
 
