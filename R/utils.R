@@ -542,7 +542,7 @@ calibrate_matches <- function(map){
     the_formula <- formula(the_formula)
 
     fit <- try(glm(the_formula, family = "binomial", data = map[ind & !is.na(lugar_match)]), silent=TRUE)
-    if(class(fit)=="try-error"){
+    if(class(fit)[1]=="try-error"){
       warning(paste0("Not enough data to fit model for pattern",  paste(p, collapse = ":"),
                      ". Returing NA"))
       map[ind, score := NA]
