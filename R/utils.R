@@ -75,6 +75,232 @@ reverse_date <- function(tab){
   tab[!is.na(dob),]
 }
 
+get_all_matches <-  function(query, target, total.max = 8, full.max= 8,
+                             check.truncated = TRUE, truncate = "am", self.match = FALSE) {
+  message("Calculando frecuencias de los nombres.")
+  freq <- compute_name_freqs(target)
+
+  cols <- c("full", "pn", "sn", "sn_i", "ap", "am")
+  query <- query[,(cols) := lapply(.SD, as.character), .SDcols = cols]
+  target <- target[,(cols) := lapply(.SD, as.character), .SDcols = cols]
+
+  by.xs <- list("full",
+                c("pn", "sn", "ap", "am"),  ##next 3 are swaps
+                c("pn", "sn_i", "ap", "am"),
+                c("pn", "ap", "am"),
+                c("pn","sn","ap"), ##next 4 names in wrong place
+                c("pn","ap","am"),
+                c("pn","sn"),
+                c("pn","ap"))
+
+  by.ys <- list("full",
+                c("pn", "sn", "am", "ap"),
+                c("pn", "sn_i", "am", "ap"),
+                c("pn", "am", "ap"),
+                c("pn","ap","am"),
+                c("pn","sn","ap"),
+                c("pn","ap"),
+                c("pn","sn"))
+  n <- length(by.xs)
+  swap <- 1:n > 1
+  lastname_swap <- c(1:n) %in% 2:4
+
+  pms <- vector("list", n)
+  query_r <- reverse_date(query)
+  pms_r <- vector("list", n)
+
+  message("Encontrando pareos exactos.")
+  pb <-  txtProgressBar( 1, n, style = 3)
+
+  ## We use these to remove perfect matches and stop paring them
+  keep_query <- rep(TRUE, nrow(query))
+  keep_query_r <- rep(TRUE, nrow(query_r))
+  keep_target <- rep(TRUE, nrow(target))
+
+  for(i in 1:n){ # in for-loop because we change query and target
+    setTxtProgressBar(pb, i)
+
+    if(lastname_swap[i]){
+
+      ind <- as.character(query$ap) != as.character(query$am)
+      ind[is.na(ind)] <- FALSE ##if last names same no point in swapping
+      pms[[i]] <- perfect_match_engine(query[ind & keep_query], target[keep_target],
+                                       by.x = by.xs[[i]], by.y = by.ys[[i]])
+    } else{
+      pms[[i]] <- perfect_match_engine(query[keep_query], target[keep_target],
+                                       by.x = by.xs[[i]], by.y = by.ys[[i]])
+    }
+
+
+    is_full <- identical(by.xs[[i]], "full") & identical(by.ys[[i]],"full")
+    if(!is.null(pms[[i]])){
+      if(nrow(pms[[i]])>0 & self.match){ ## remove repeated comparisons
+        pms[[i]] <- pms[[i]][id.x!=id.y]
+        pms[[i]][, pair := fifelse(id.x < id.y, paste(id.x, id.y, sep=":"), paste(id.y, id.x, sep=":"))]
+        pms[[i]] <- unique(pms[[i]], by="pair")
+        pms[[i]][, pair:= NULL]
+      }
+      if(nrow(pms[[i]])>0){
+        pms[[i]]$swap <- swap[i]
+        pms[[i]]$reverse_dob <- FALSE
+        if(is_full & !self.match){
+          keep_query[query$id %in% unique(pms[[i]]$id.x)] <- FALSE
+          keep_target[target$id %in% unique(pms[[i]]$id.y)] <- FALSE
+          pms[[i]]$full_match <- TRUE
+        } else{
+          pms[[i]]$full_match <- FALSE
+        }
+      } else{
+        pms[[i]] <- NULL
+      }
+    }
+
+    if(lastname_swap[i]){
+      ind <- as.character(query_r$ap) != as.character(query_r$am)
+      ind[is.na(ind)] <- FALSE
+      pms_r[[i]] <- perfect_match_engine(query_r[ind & keep_query_r], target[keep_target],
+                                         by.x = by.xs[[i]], by.y = by.ys[[i]])
+    } else{
+      pms_r[[i]] <- perfect_match_engine(query_r[keep_query_r], target[keep_target],
+                                         by.x = by.xs[[i]], by.y = by.ys[[i]])
+    }
+
+    if(!is.null(pms_r[[i]])){
+      if(nrow(pms_r[[i]])>0 & self.match){
+        pms_r[[i]][, pair := fifelse(id.x < id.y, paste(id.x, id.y, sep=":"), paste(id.y, id.x, sep=":"))]
+        pms_r[[i]] <- unique(pms_r[[i]], by="pair")
+        pms_r[[i]][, pair:= NULL]
+      }
+      if(nrow(pms_r[[i]])>0){
+        pms_r[[i]]$swap <- swap[i]
+        pms_r[[i]]$reverse_dob <- TRUE
+        if(is_full & !self.match){
+          keep_query_r[query_r$id %in% unique(pms_r[[i]]$id.x)] <- FALSE
+          keep_target[target$id %in% unique(pms_r[[i]]$id.y)] <- FALSE
+          pms_r[[i]]$full_match <- TRUE
+        } else{
+          pms_r[[i]]$full_match <- FALSE
+        }
+      }
+      else{
+        pms_r[[i]] <- NULL
+      }
+    }
+  }
+
+  pms <- rbindlist(c(pms, pms_r))
+
+  if(!is.null(pms)){
+    if(nrow(pms>0)){
+      pms$match <- factor("perfect", levels=c("perfect", "fuzzy"))
+      pms$truncated <- FALSE
+      cols <-c("pn", "sn", "ap", "am")
+      for(cn in cols){
+        pms[[paste(cn, "freq", sep="_")]] <- freq[[cn]]$freq[ match(pms[[ cn ]], freq[[cn]]$name) ]
+      }
+      pms$genero_match <- pms$genero.x == pms$genero.y
+      pms$lugar_match <- pms$lugar.x == pms$lugar.y
+      pms$truncated <- FALSE
+    } else pms <- NULL
+  }
+  message("\nEncontrando pareos con errores.")
+
+  fms <- fuzzy_match_engine(query[keep_query], target[keep_target],  total.max=total.max, full.max=full.max,
+                            self.match = self.match)
+
+  if(!is.null(fms)) if(nrow(fms)>0) fms$reverse_dob <- FALSE
+
+  message("\nEncontrando pareos con errores con mes y día invertido.")
+  fms_r <- fuzzy_match_engine(query_r[keep_query_r], target[keep_target],  total.max=total.max, full.max=full.max)
+  if(!is.null(fms_r)){
+    if(nrow(fms_r)>0){
+      if(self.match){ ## remove repeated comparisons
+        fms_r <- fms_r[id.x!=id.y]
+        fms_r[, pair := fifelse(id.x < id.y, paste(id.x, id.y, sep=":"), paste(id.y, id.x, sep=":"))]
+        fms_r <- unique(fms_r, by="pair")
+        fms_r[, pair:= NULL]
+      }
+
+      fms_r$reverse_dob <- TRUE
+    }
+  }
+
+  fms <- rbindlist(list(fms, fms_r))
+
+  if(!is.null(fms)){
+    if(nrow(fms)>0){
+      fms[, total_dist := rowSums(.SD, na.rm=TRUE), .SDcols = patterns("(pn|sn|ap|am)_dist")]
+      cols <- outer(c("full", "pn", "sn", "ap", "am"),
+                    c(name = "", x = ".x", y = ".y", dist = "_dist", nchar = "_nchar", i_match = "_i_match"), paste0)
+
+
+      for(i in 1:nrow(cols)){
+
+        nchar.x <- nchar(fms[[ cols[i, "x"] ]])
+        nchar.y <- nchar(fms[[ cols[i, "y"] ]])
+
+        ## Because second last name (need to define truncate = "am") is often truncated, we check if one is a substring of the other
+        ## if if check.truncated is true we make the distance 0
+        fms$truncated <- FALSE
+        if(check.truncated){
+          if(cols[i,"name"] %in% truncate){
+            ind <- which(( substr(fms[[ cols[i, "x"] ]], 1, nchar.y) == substr(fms[[ cols[i, "y"] ]], 1, nchar.y) |
+                             substr(fms[[ cols[i, "x"] ]], 1, nchar.x) == substr(fms[[ cols[i, "y"] ]], 1, nchar.x)) & nchar.x != nchar.y)
+            cn <- cols[i, "dist"]
+            fms[ind, (cn) := 0]
+            fms[ind, truncated := TRUE]
+          }
+        }
+
+        fms[[ cols[i, "nchar"] ]] <-  pmax(nchar.x, nchar.y, na.rm = TRUE)
+        if(cols[i]!="sn"){
+          fms[[ cols[i, "i_match"] ]] <- substr(fms[[ cols[i, "x"]]], 1, 1) == substr(fms[[ cols[i, "y"]]], 1, 1)
+        } else{
+          fms$sn_i_match <- fms$sn_i.x == fms$sn_i.y
+        }
+
+        if(cols[i]!="full"){
+          cn <- cols[i, "name"]
+          freq.x <- freq[[cn]]$freq[ match(fms[[ cols[i, "x"] ]], freq[[cn]]$name) ]
+          freq.y <- freq[[cn]]$freq[ match(fms[[ cols[i, "y"] ]], freq[[cn]]$name) ]
+
+          fms[[ paste(cn, "freq", sep="_") ]] <- pmax(freq.x, freq.y) #if either is NA don't use, probably misspelled name
+        }
+      }
+
+      fms$match <- factor("fuzzy", levels=c("perfect", "fuzzy"))
+      fms$genero_match <- fms$genero.x == fms$genero.y
+      fms$lugar_match <- fms$lugar.x == fms$lugar.y
+      fms$full_match <- FALSE
+    }
+  }
+
+  if(is.null(pms) & is.null(fms)) return(NULL)
+
+  cols <- c("id.x", "id.y",
+            "full_dist", "pn_dist", "sn_dist", "ap_dist", "am_dist",
+            "full_nchar", "pn_nchar", "sn_nchar", "ap_nchar", "am_nchar",
+            "full_i_match",  "pn_i_match", "sn_i_match", "ap_i_match", "am_i_match",
+            "pn_freq","sn_freq", "ap_freq", "am_freq",
+            "genero_match", "lugar_match", "match", "full_match",
+            "swap", "reverse_dob", "truncated")
+  if(!is.null(pms)){
+    if(nrow(pms) > 0){
+      pms <- pms[,..cols]
+      setnames(pms, "match", "match_type")
+    } else pms <- NULL
+  }
+  if(!is.null(fms)){
+    if(nrow(fms) > 0){
+      fms <- fms[,..cols]
+      setnames(fms, "match", "match_type")
+    } else fms <- NULL
+  }
+
+  map <- rbindlist(list(pms, fms))
+  return(map)
+}
+
 perfect_match_engine <- function(query, target, by=NULL, by.x=NULL, by.y=NULL){
 
   if(is.null(by.x)) by.x <- by
@@ -117,6 +343,8 @@ perfect_match_engine <- function(query, target, by=NULL, by.x=NULL, by.y=NULL){
              na.rm = TRUE)
     }
   } else{
+    map[, full_dist := stringdist(full.x, full.y)]
+    map[, full_nchar := pmin(nchar(full.x), nchar(full.y))]
     cols <- paste(by.x[by.x!="sn_i"], "dist", sep="_")
     map[,(cols) := 0L]
     for(cn in by.x[!by.x%in%"sn_i"]){
@@ -146,24 +374,21 @@ fuzzy_match_engine <- function(query, target, total.max = 8, full.max = 8, self.
   target_index <- split(1:nrow(target), target$dob)
 
   common <- intersect(names(query_index), names(target_index))
+  if(length(common)==0) return(NULL)
   query_index <-query_index[common]
   target_index <- target_index[common]
-
-  pb <-  txtProgressBar( 1, length(common), style = 3)
 
   qnames <- paste(names(query), "x", sep=".")
   tnames <- paste(names(target), "y", sep=".")
 
+  pb <-  txtProgressBar( 1, length(common), style = 3)
   fms <- lapply(seq_along(common), function(i){
     setTxtProgressBar(pb, i)
 
     qind <- query_index[[i]]
     tind <- target_index[[i]]
 
-    if(self.match){
-      tind <- tind[!tind %in% qind] ##remove same record to not compare to self
-      if(length(tind) == 0) return(NULL)
-    }
+    if(self.match & length(qind)<2) return(NULL)
 
     qq <- query[qind]
     tt <- target[tind]
@@ -173,6 +398,12 @@ fuzzy_match_engine <- function(query, target, total.max = 8, full.max = 8, self.
     full_dist <- stringdistmatrix(qq$full.x, tt$full.y, method = "lv")
 
     pn_dist <- stringdistmatrix(qq$pn.x, tt$pn.y, method = "lv")
+
+    if(self.match){ ##don't compare twice
+      full_dist[lower.tri(full_dist, diag = TRUE)] <- Inf
+      pn_dist[lower.tri(pn_dist, diag = TRUE)] <- Inf ## make pn_dist Inf instead of total so it stays Inf in the last name swap
+    }
+
     pn_dist_nona <- pn_dist
     pn_dist_nona[is.na(pn_dist_nona)] <- 0
 
@@ -196,7 +427,7 @@ fuzzy_match_engine <- function(query, target, total.max = 8, full.max = 8, self.
 
     ## for all the rows of the target that are within 6 errors of the query we keep
     matches <- lapply(1:nrow(total), function(j){
-      ind <- which(total[j,]<= total.max | full_dist[j,] <=  full.max)
+      ind <- which(total[j,]<= total.max | full_dist[j,] <= full.max)
       if(length(ind)==0) return(NULL) else{
         ret <- cbind(qq[j],
                      tt[ind],
@@ -230,7 +461,7 @@ fuzzy_match_engine <- function(query, target, total.max = 8, full.max = 8, self.
           ret <- cbind(qq[j],
                        tt[ind],
                        data.table(full_dist = full_dist[j, ind], pn_dist = pn_dist[j,ind], sn_dist = sn_dist[j,ind], ap_dist = ap_dist[j,ind], am_dist =  am_dist[j,ind]))
-          ret$swap <- FALSE
+          ret$swap <- TRUE
           return(ret)
         }
       })
@@ -242,5 +473,113 @@ fuzzy_match_engine <- function(query, target, total.max = 8, full.max = 8, self.
 
   fms <- rbindlist(fms)
   return(fms)
+}
+
+
+calibrate_matches <- function(map){
+
+  map <- copy(map)
+  message("\nCalibrando el pareo.")
+  map[, prop_match:=as.numeric(NA)]
+  map[, score:=as.numeric(NA)]
+  map[, pattern:=as.character(NA)]
+  map[, full_prop_match := 1-full_dist/full_nchar]
+  map$pn_ap_match <- 1-rowSums(map[,c("pn_dist", "ap_dist")],na.rm=TRUE)/
+    rowSums(map[,c("pn_nchar", "ap_nchar")],na.rm=TRUE)
+
+  ## keep if 90% match with full name
+  map[full_prop_match >= 0.9, `:=`(prop_match = full_prop_match,
+                                   score = mean(lugar_match, na.rm=TRUE),
+                                   pattern = "full")]
+
+  patterns <- list(c("pn", "sn", "ap", "am"),
+                   c("pn", "sn_i", "ap", "am"),
+                   c("pn", "ap", "am"),
+                   c("pn", "sn", "ap"),
+                   c("pn", "sn_i", "ap"),
+                   c("pn", "ap"),
+                   c("ap", "am"))
+
+  ## what name frequencies to include in model
+  ## decided usign EDA
+  freqs <- list(c("ap","am"),
+                c("ap", "am"),
+                c("pn", "ap", "am"),
+                c("ap"),
+                c("pn", "ap"),
+                c("pn", "ap"),
+                c("ap","am"))
+
+  ## for names with missing frequencies impute the median
+  freq_impute <- function(x){
+    x[is.na(x)] <- median(x, na.rm=TRUE)
+    return(x)
+  }
+  cols <- paste(c("pn", "sn", "ap", "am"), "freq", sep="_")
+  map[, (cols) := lapply(.SD, freq_impute), .SDcols = cols]
+
+  map[, sn_i_dist := as.numeric(!sn_i_match)]
+  map[, sn_i_nchar := as.numeric(!is.na(sn_i_match))]
+  for(i in seq_along(patterns)){
+    p <- patterns[[i]]
+    dist_cols <- paste(p, "dist", sep="_")
+    nchar_cols <- paste(p, "nchar", sep="_")
+    if(!is.null(freqs[[i]])){
+      freq_cols <- paste(freqs[[i]], "freq", sep="_")
+    } else freq_cols<- NULL
+
+    ind <- !matrixStats::rowAnyNAs(as.matrix(map[, ..dist_cols])) &
+      is.na(map[,score]) ## needed columns not NA and not yet scored
+
+    map$prop_match[ind] <- 1 - rowSums(map[ind,..dist_cols])/(rowSums(map[ind,..nchar_cols]))
+
+    the_formula <- paste("lugar_match ~ pmax(prop_match,0.6)")
+    if(!is.null(freq_cols)){
+      the_formula <- paste(the_formula, "+",
+                           paste0("log(pmax(", freq_cols, ",10^-4))", collapse = " + "))
+    }
+    if(sum(map[ind & !is.na(lugar_match)]$swap)>=100) the_formula <- paste(the_formula, "swap", sep="+")
+    the_formula <- formula(the_formula)
+
+    fit <- try(glm(the_formula, family = "binomial", data = map[ind & !is.na(lugar_match)]), silent=TRUE)
+    if(class(fit)=="try-error"){
+      warning(paste0("Not enough data to fit model for pattern",  paste(p, collapse = ":"),
+                     ". Returing NA"))
+      map[ind, score := NA]
+    } else{
+      map[ind, score := predict(fit, newdata = map[ind], type = "response")]
+    }
+
+    map[ind, pattern := paste(p, collapse = ":")]
+  }
+
+  map[, pattern := factor(pattern, levels = sapply(patterns, paste, collapse=":"))]
+  map[, score := (score - min(score, na.rm=TRUE)) / max(score - min(score,na.rm=TRUE), na.rm = TRUE)]
+
+  return(map)
+}
+
+
+cleanup_matches <- function(map, query, target, self.match, cutoff = 0.5){
+
+  message("Limpiando pareos.")
+  ## map must be output of calibrate map
+  map <- copy(map)
+  map <- map[!is.na(score)]
+
+  ## Pick the best score for each id.x
+  if(!self.match){
+    map[order(id.y, !genero_match, !lugar_match, pattern, full_prop_match)]
+    map <- map[map[,.I[which.max(score)], by = id.x]$V1]
+  } else{
+    map[order(id.y, !genero_match, !lugar_match, pattern, full_prop_match)]
+    map <- map[map[,.I[which.max(score)], by = id.y]$V1]
+    map <- unique(map, by=c("id.x", "id.y"))
+  }
+
+  map <- merge(merge(map, query, by.x = "id.x", by.y = "id", all.x = TRUE), target, by.x = "id.y", by.y = "id", all.x=TRUE)
+  cols <- c("id.x", "id.y", "original.x", "original.y", "score",
+            "prop_match", "full_prop_match", "pn_ap_match", "lugar_match", "genero_match", "pattern", "match_type", "full_match", "swap", "reverse_dob", "truncated")
+  return(map[score>=cutoff, ..cols][order(score, decreasing = TRUE)])
 }
 

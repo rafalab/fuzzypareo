@@ -7,12 +7,12 @@
 fuzzy_match(
   query,
   target = NULL,
-  cutoff = 0.2,
+  cutoff = 0.5,
   total.max = 8,
   full.max = 8,
   check.truncated = TRUE,
   truncate = "am",
-  min.n = 25
+  keep.all.matches = FALSE
 )
 }
 \arguments{
@@ -29,6 +29,8 @@ fuzzy_match(
 \item{check.truncated}{Checks if second last name is truncated. If truncated matches only remaining part.}
 
 \item{truncate}{The columns to truncate. Defaults to second name `am`}
+
+\item{keep.all.matches}{if `TRUE` the function returns a list with the final match and a table with all the matches that were considered.}
 
 \item{min.n}{Minimum number of data points needed to fit calibration model}
 }
