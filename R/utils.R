@@ -80,6 +80,9 @@ get_all_matches <-  function(query, target, total.max = 8, full.max= 8,
   message("Calculando frecuencias de los nombres.")
   freq <- compute_name_freqs(target)
 
+  query <- copy(query)
+  target <- copy(target)
+
   cols <- c("full", "pn", "sn", "sn_i", "ap", "am")
   query <- query[,(cols) := lapply(.SD, as.character), .SDcols = cols]
   target <- target[,(cols) := lapply(.SD, as.character), .SDcols = cols]
@@ -191,7 +194,7 @@ get_all_matches <-  function(query, target, total.max = 8, full.max= 8,
   pms <- rbindlist(c(pms, pms_r))
 
   if(!is.null(pms)){
-    if(nrow(pms>0)){
+    if(nrow(pms)>0){
       pms$match <- factor("perfect", levels=c("perfect", "fuzzy"))
       pms$truncated <- FALSE
       cols <-c("pn", "sn", "ap", "am")
@@ -543,7 +546,7 @@ calibrate_matches <- function(map){
 
     fit <- try(glm(the_formula, family = "binomial", data = map[ind & !is.na(lugar_match)]), silent=TRUE)
     if(class(fit)[1]=="try-error"){
-      warning(paste0("Not enough data to fit model for pattern",  paste(p, collapse = ":"),
+      warning(paste0("Not enough data to fit model for pattern ",  paste(p, collapse = ":"),
                      ". Returing NA"))
       map[ind, score := NA]
     } else{
