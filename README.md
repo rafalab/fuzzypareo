@@ -9,7 +9,7 @@ It attempts to correct spelling errors and data entry errors such as both last n
 ## Installation
 
 ```
-devtools::install_githup("rafalab/fuzzypareo")
+devtools::install_github("rafalab/fuzzypareo")
 ```
 
 
