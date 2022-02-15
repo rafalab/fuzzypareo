@@ -12,4 +12,9 @@ It attempts to correct spelling errors and data entry errors such as both last n
 devtools::install_github("rafalab/fuzzypareo")
 ```
 
+## License
+
+This work is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0)
+
+
 
