@@ -563,7 +563,7 @@ calibrate_matches <- function(map){
 }
 
 
-cleanup_matches <- function(map, query, target, self.match, cutoff = 0.5){
+cleanup_matches <- function(map, query, target, self.match, cutoff = 0){
 
   message("\nLimpiando pareos.")
   ## map must be output of calibrate map
